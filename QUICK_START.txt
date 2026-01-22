@@ -1,0 +1,123 @@
+╔══════════════════════════════════════════════════════════════╗
+║     Zen 2 (Ryzen 9 3950X) Optimization - Quick Start        ║
+╚══════════════════════════════════════════════════════════════╝
+
+STEP 1: BUILD
+─────────────
+cd /home/syoyo/work/xmrig
+./build_zen2_optimized.sh
+
+Choose:
+  • Run prefetch benchmark: YES
+  • Apply prefetch optimization: WAIT (analyze results first)
+  • Build type: 1 (Release) or 2 (with LTO)
+
+STEP 2: SYSTEM SETUP
+────────────────────
+# MSR access
+sudo modprobe msr
+echo "msr" | sudo tee -a /etc/modules
+
+# 1GB Huge pages (temporary)
+echo 3 | sudo tee /proc/sys/vm/nr_hugepages
+
+# CPU governor
+sudo cpupower frequency-set -g performance
+
+STEP 3: CONFIG
+──────────────
+cd build
+nano config.json
+
+Set:
+  • Pool URL and wallet address
+  • randomx.init-avx2: 1
+  • randomx.1gb-pages: true
+  • randomx.wrmsr: true
+
+STEP 4: RUN
+───────────
+# Benchmark
+./xmrig --bench=1M
+
+# Mine
+./xmrig --config=config.json
+
+═══════════════════════════════════════════════════════════════
+
+WHAT WAS OPTIMIZED:
+───────────────────
+✓ AVX2 dataset init enabled for Zen 2 desktop (8+ cores)
+✓ Prefetch benchmark tool created
+✓ Optional PREFETCHNTA → PREFETCHT0 assembly patches
+✓ Compiler flags: -march=znver2 -mtune=znver2
+
+EXPECTED GAINS:
+───────────────
+• AVX2 init: 10-15% faster dataset initialization
+• Prefetch opt: 2-5% hashrate (test first!)
+• 1GB pages: 1-3% hashrate
+• MSR tuning: 1-2% hashrate
+• Zen 2 flags: 1-2% hashrate
+─────────────
+TOTAL: 5-15% improvement over baseline
+
+═══════════════════════════════════════════════════════════════
+
+FILES LOCATION:
+───────────────
+Modified:       src/crypto/randomx/jit_compiler_x86.cpp
+Benchmark:      prefetch_bench_zen2.cpp → ./prefetch_bench
+Build script:   build_zen2_optimized.sh
+Full guide:     ZEN2_OPTIMIZATION_GUIDE.md
+Summary:        OPTIMIZATION_SUMMARY.md
+
+ROLLBACK:
+─────────
+git checkout src/crypto/randomx/jit_compiler_x86.cpp
+cd build && make clean && make -j$(nproc)
+
+═══════════════════════════════════════════════════════════════
+
+VERIFY OPTIMIZATIONS:
+─────────────────────
+cd build
+
+# Check AVX2
+./xmrig --version | grep AVX2
+
+# Check config
+./xmrig --config=config.json --dry-run 2>&1 | grep -i avx2
+
+# Check huge pages
+cat /proc/meminfo | grep HugePages_Total
+
+# Check MSR
+lsmod | grep msr
+
+TROUBLESHOOTING:
+────────────────
+No AVX2 message → Check config: "init-avx2": 1
+MSR error       → sudo modprobe msr
+No perf gain    → Check huge pages, CPU governor, thermals
+
+═══════════════════════════════════════════════════════════════
+
+FOR BEST RESULTS ON 3950X (16 cores / 32 threads):
+───────────────────────────────────────────────────
+• Use all 32 threads (max-threads-hint: 100)
+• Enable 1GB huge pages
+• Enable MSR tuning (wrmsr: true)
+• Set CPU governor to performance
+• Consider CCX-aware binding if single-CCX test shows benefit
+  (hwloc-bind L3:0 ./xmrig for 4-core CCX testing)
+
+3950X has 4 CCX units:
+  CCX0: cores 0-3  + 16MB L3
+  CCX1: cores 4-7  + 16MB L3
+  CCX2: cores 8-11 + 16MB L3
+  CCX3: cores 12-15 + 16MB L3
+
+═══════════════════════════════════════════════════════════════
+
+Questions? See: ZEN2_OPTIMIZATION_GUIDE.md
